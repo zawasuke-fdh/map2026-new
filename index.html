@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="西日本新聞「子どもの交通事故マップ」。福岡、佐賀、長崎県内で起きた子どもの交通事故発生地点を確認できます。">
+    <meta property="og:title" content="西日本新聞「福岡・佐賀・長崎3県子どもの交通事故マップ」">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://specials.nishinippon.co.jp/children_traffic_accident/img/ogp.png">
+    <title>交通事故マップ＋小学校区</title>
+    
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+    
+    <script id="search-js" defer src="https://api.mapbox.com/search-js/v1.0.0-beta.22/web.js"></script>
+
+    <style>
+        /* =========================================
+           基本レイアウト設定
+           ========================================= */
+        body { 
+            margin: 0; 
+            font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; 
+            height: 100vh; 
+            height: 100svh; /* スマホブラウザのアドレスバーを考慮した高さ設定 */
+            overflow: hidden; /* 画面外のスクロールを防止 */
+            color: #333; 
+        }
+        
+        /* =========================================
+           【重要修正】Z-index（重なり順）の階層ルール
+           検索ボックスのドロップダウンが独自パネルに隠れないよう、
+           Mapboxの標準コントロール群を前面（z-index: 20）に引き上げます。
+           ========================================= */
+        .mapboxgl-ctrl-top-left,
+        .mapboxgl-ctrl-top-right,
+        .mapboxgl-ctrl-bottom-left,
+        .mapboxgl-ctrl-bottom-right {
+            z-index: 20 !important; 
+        }
+
+        /* ポップアップはさらに前面に表示 */
+        .mapboxgl-popup { 
+            max-width: 400px !important; 
+            z-index: 3000 !important; 
+        }
+
+        /* =========================================
+           Mapbox ポップアップ関連のカスタマイズ
+           ========================================= */
+        .mapboxgl-popup-content { 
+            padding: 16px; 
+            border-radius: 10px; 
+            box-shadow: 0 6px 30px rgba(0,0,0,0.25);
+        }
+        .popup-title { 
+            font-size: 1.15rem; 
+            margin-bottom: 12px; 
+            border-bottom: 3px solid #f15a24;
+            padding-bottom: 6px; 
+            font-weight: bold; 
+            color: #222;
+        }
+        
+        /* ポップアップ内の情報テーブル */
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 0.9rem; 
+        }
+        th, td { 
+            border: 1px solid #e5e5e5; 
+            padding: 7px 9px; 
+            vertical-align: middle; 
+        }
+        td:first-child { 
+            background-color: #f9f9f9;
+            font-weight: bold; 
+            color: #555; 
+            white-space: nowrap; 
+            width: 30%; 
+        }
+        
+        /* =========================================
+           データ表示用の装飾（ハイライト等）
+           ========================================= */
+        /* 死傷者数などの重要情報を目立たせるエリア */
+        .critical-info {
+            background: #fff3cd;
+            border-left: 4px solid #ff6b6b;
+            padding: 8px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .critical-info span {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        /* 0人以外の場合に色をつけるためのクラス */
+        .death-count { color: #dc3545; }
+        .injury-count { color: #fd7e14; }
+        
+        /* 年齢別の色分けバッジ */
+        .age-highlight { 
+            font-weight: bold; 
+            display: inline-block; 
+            padding: 3px 7px; 
+            border-radius: 4px; 
+        }
+        /* 補足情報（損傷程度など）の文字スタイル */
+        .sub-info { 
+            font-size: 0.85rem; 
+            color: #666; 
+            display: block; 
+            margin-top: 3px; 
+        }
+        
+        /* =========================================
+           UIコンポーネント（ヘッダー、パネル、凡例）
+           ========================================= */
+        .container { 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        /* ヘッダー領域 */
+        .header { 
+            flex-shrink: 0; 
+            height: 60px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 15px; 
+            background: #fff; 
+            border-bottom: 1px solid #ddd; 
+            position: relative; 
+            z-index: 100; /* マップ要素より確実に上に配置 */
+        }
+        .logo-area { display: flex; align-items: center; }
+        .logo-area img { height: 32px; margin-right: 10px; }
+        .header h1 { font-size: 1.2rem; margin: 0; line-height: 1.3; }
+        
+        /* 「使い方」ボタン */
+        .menu-btn { 
+            background: #f15a24;
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 4px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            white-space: nowrap;
+        }
+        .menu-btn:hover { opacity: 0.9; }
+        
+        /* マップ表示領域 */
+        .main-content { flex-grow: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+        
+        /* コントロールパネル（表示切り替えボタン群） */
+        .control-panel {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255,255,255,0.97);
+            padding: 14px 16px; 
+            border-radius: 8px;
+            box-shadow: 0 3px 20px rgba(0,0,0,0.18);
+            z-index: 10; /* Mapboxのコントロール(20)より背面に設定 */
+            max-width: 330px; 
+        }
+        
+        .control-section { margin-bottom: 15px; }
+        .control-section:last-child { margin-bottom: 0; }
+        .control-section-title {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 8px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        .control-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+        
+        /* =========================================
+           チェックボックス風のボタンスタイル
+           ========================================= */
+        .control-btn {
+            position: relative;        /* ::before, ::afterの絶対配置の基準 */
+            background: #fff;
+            border: 2px solid #ddd;
+            padding: 8px 12px 8px 30px; /* チェックマークが入るよう左側に余白(30px)を設ける */
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;       /* 文字を折り返さない */
+            flex: 1 1 auto;            /* 文字幅に合わせてボタンが広がる設定 */
+            text-align: left;          /* 左揃え */
+        }
+        .control-btn:hover { background: #f8f8f8; }
+        
+        /* 四角い枠（チェックボックスの土台） */
+        .control-btn::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            border: 2px solid #bbb;
+            border-radius: 3px;
+            background-color: #fff;
+            transition: all 0.2s;
+            box-sizing: border-box;
+        }
+        
+        /* [data-filter]を持つボタン（事故種別）はラジオボタン（丸）に見せる */
+        .control-btn[data-filter]::before {
+            border-radius: 50%;
+        }
+
+        /* アクティブ（選択中）になった時のチェックマーク・丸ポチ（初期状態は透明） */
+        .control-btn::after {
+            content: '';
+            position: absolute;
+            opacity: 0; 
+            transition: opacity 0.2s;
+        }
+        /* チェックボックス用のレ点 */
+        .control-btn:not([data-filter])::after {
+            left: 12.5px;
+            top: 50%;
+            width: 4px;
+            height: 8px;
+            border: solid #fff;
+            border-width: 0 2px 2px 0;
+            transform: translateY(-65%) rotate(45deg);
+        }
+        /* ラジオボタン用の中央の丸ポチ */
+        .control-btn[data-filter]::after {
+            left: 12px;
+            top: 50%;
+            width: 6px;
+            height: 6px;
+            background-color: #fff;
+            border-radius: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* アクティブ時の各ボタンの背景色・枠線色設定 */
+        .control-btn.active { color: #fff; }
+        .control-btn.children.active { background: #29abe2; border-color: #29abe2; }
+        .control-btn.npa.active { background: #6c757d; border-color: #6c757d; }
+        .control-btn.death.active { background: #dc3545; border-color: #dc3545; }
+        .control-btn.injury.active { background: #fd7e14; border-color: #fd7e14; }
+        .control-btn.district.active { background: #78909c; border-color: #78909c; }
+        .control-btn[data-filter="all"].active { background: #f15a24; border-color: #f15a24; }
+        
+        /* アクティブ時：チェックボックスの枠線を白にし、背景を少し透けさせる */
+        .control-btn.active::before {
+            border-color: #fff;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        /* アクティブ時：チェックマーク・丸ポチを表示 */
+        .control-btn.active::after {
+            opacity: 1;
+        }
+        /* ========================================= */
+
+        /* 凡例パネル */
+        .legend { 
+            position: absolute; 
+            bottom: 30px; 
+            left: 15px; 
+            background: rgba(255,255,255,0.97);
+            padding: 14px 16px; 
+            border-radius: 10px; 
+            box-shadow: 0 3px 20px rgba(0,0,0,0.18); 
+            font-size: 0.9rem; 
+            z-index: 10; /* コントロールパネルと同じ高さ(Mapbox UIより下)に設定 */
+            max-width: 250px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .legend.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; }
+        .legend h4 { 
+            margin: 0 0 12px; 
+            border-bottom: 2px solid #f15a24; 
+            padding-bottom: 6px; 
+            color: #222;
+            font-size: 1rem;
+        }
+        .legend-section { margin-bottom: 12px; }
+        .legend-section:last-child { margin-bottom: 0; }
+        .legend-subtitle {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+        .legend-item { display: flex; align-items: center; margin-bottom: 6px; }
+        .legend-mark { 
+            width: 16px; height: 16px; border-radius: 50%;
+            margin-right: 8px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+        }
+        .legend-line { 
+            width: 25px; height: 3px; margin-right: 8px; 
+            background: #78909c; flex-shrink: 0;
+        }
+        
+        /* 使い方・情報パネル（右からスライドイン） */
+        .info-panel { 
+            position: absolute; 
+            top: 0; 
+            right: -100%; 
+            width: 90%; 
+            max-width: 420px; 
+            height: 100%; 
+            background: #fff; 
+            /* 【重要修正】Mapboxの検索窓(20)などすべての上に強制表示されるよう 9999 !important に変更 */
+            z-index: 9999 !important; 
+            transition: right 0.3s ease; 
+            box-shadow: -5px 0 20px rgba(0,0,0,0.2); 
+            display: flex; 
+            flex-direction: column; 
+        }
+        .info-panel.open { right: 0; }
+        .info-header { display: flex; justify-content: flex-end; padding: 10px; }
+        .close-btn { background: none; border: none; font-size: 2rem; color: #999; cursor: pointer; }
+        .info-body { flex-grow: 1; overflow-y: auto; padding: 0 25px 40px; line-height: 1.8; }
+        
+        /* SNSシェアボタン群 */
+        .sns-share { display: flex; gap: 15px; margin-bottom: 25px; }
+        .sns-share img { width: 36px; height: 36px; opacity: 0.8; transition: opacity 0.2s; }
+        .sns-share img:hover { opacity: 1; }
+        
+        /* =========================================
+           レスポンシブ対応（スマートフォン向け設定）
+           ========================================= */
+        @media (max-width: 768px) {
+            .header { height: auto; min-height: 60px; padding: 8px 10px; }
+            .header h1 { font-size: 0.85rem; line-height: 1.2; }
+            .logo-area img { height: 24px; margin-right: 6px; }
+            .menu-btn { font-size: 0.75rem; padding: 6px 8px; }
+            
+            /* スマホではコントロールパネルを画面下部中央に配置 */
+            .control-panel {
+                top: auto; bottom: 10px; right: 50%;
+                transform: translateX(50%);
+                max-width: calc(100% - 20px);
+                padding: 10px 12px;
+            }
+            .control-section-title { font-size: 0.7rem; margin-bottom: 6px; }
+            
+            /* スマホでのボタンの文字サイズと余白 */
+            .control-btn { font-size: 0.75rem; padding: 6px 10px 6px 26px; }
+            .control-btn::before { left: 6px; width: 12px; height: 12px; }
+            .control-btn:not([data-filter])::after { left: 10px; }
+            .control-btn[data-filter]::after { left: 9px; width: 6px; height: 6px; }
+            
+            /* スマホでは凡例を左上に配置 */
+            .legend { 
+                bottom: auto; top: 70px; left: 8px; 
+                padding: 8px 10px; font-size: 0.75rem; max-width: 180px;
+            }
+            .legend h4 { font-size: 0.85rem; margin-bottom: 8px; }
+            .legend-subtitle { font-size: 0.7rem; }
+            .legend-item { margin-bottom: 4px; }
+            
+            .mapboxgl-popup { max-width: 280px !important; }
+            .mapboxgl-popup-content { padding: 12px; }
+            .popup-title { font-size: 1rem; margin-bottom: 10px; }
+            table { font-size: 0.8rem; }
+            th, td { padding: 5px 6px; }
+            .critical-info { padding: 6px; margin: 6px 0; font-size: 0.85rem; }
+            
+            /* スマホの小さな画面を圧迫しないよう、ポップアップ展開時は凡例を非表示にする仕組み */
+            .legend.auto-hide-mobile { display: none; }
+        }
+        
+        /* 非常に小さい端末向け（iPhone SEなど） */
+        @media (max-width: 360px) {
+            .header h1 { font-size: 0.75rem; }
+            /* 画面が狭くてもボタン幅を確保して文字が読めるようにする */
+            .control-btn { font-size: 0.7rem; padding: 6px 6px 6px 22px; }
+            .legend { max-width: 160px; font-size: 0.7rem; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header" title="ページヘッダー">
+            <div class="logo-area">
+                <a href="https://www.nishinippon.co.jp/" target="_blank" rel="noopener noreferrer" title="西日本新聞公式サイトへ">
+                    <img src="img/logo.png" alt="西日本新聞ロゴ">
+                </a>
+                <h1 title="地図タイトル">福岡・佐賀・長崎3県<br>子どもの交通事故マップ</h1>
+            </div>
+            <button class="menu-btn" onclick="toggleInfo()" title="使い方">使い方</button>
+        </header>
+
+        <div class="main-content" title="地図とデータ表示エリア">
+            <div id="map" title="インタラクティブ地図"></div>
+            
+            <div class="control-panel" title="表示データと事故種別の切り替え">
+                
+                <div class="control-section">
+                    <div class="control-section-title">表示データ</div>
+                    <div class="control-buttons">
+                        <button class="control-btn children active" data-source="children" onclick="toggleDataSource('children')" title="子どもの事故データ">
+                            子どもの事故
+                        </button>
+                        <button class="control-btn npa active" data-source="npa" onclick="toggleDataSource('npa')" title="警察庁データ">
+                            全年齢
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <div class="control-section-title">事故種別</div>
+                    <div class="control-buttons">
+                        <button class="control-btn active" data-filter="all" onclick="setFilter('all')" title="すべて">すべて</button>
+                        <button class="control-btn death" data-filter="death" onclick="setFilter('death')" title="死亡事故">死亡</button>
+                        <button class="control-btn injury" data-filter="injury" onclick="setFilter('injury')" title="負傷事故">負傷</button>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <div class="control-section-title">背景表示</div>
+                    <div class="control-buttons">
+                        <button class="control-btn district active" data-source="district" onclick="toggleDistrict()" title="小学校区レイヤー">
+                            小学校区
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="legend" id="legend" title="凡例">
+                <h4>凡例</h4>
+                
+                <div class="legend-section">
+                    <div class="legend-item" title="小学校区">
+                        <div class="legend-line"></div>小学校区
+                    </div>
+                </div>
+                
+                <div class="legend-section" id="legend-children">
+                    <div class="legend-subtitle">子どもの事故(2018-24)</div>
+                    <div class="legend-item" title="1～5歳"><div class="legend-mark" style="background: #f15a24;"></div>1～5歳</div>
+                    <div class="legend-item" title="6～12歳"><div class="legend-mark" style="background: #29abe2;"></div>6～12歳</div>
+                    <div class="legend-item" title="13～18歳"><div class="legend-mark" style="background: #fcd621;"></div>13～18歳</div>
+                </div>
+                
+                <div class="legend-section" id="legend-npa">
+                    <div class="legend-subtitle">全年齢の事故(2019-24)</div>
+                    <div class="legend-item" title="福岡県"><div class="legend-mark" style="background: #8e44ad; opacity: 0.7;"></div>福岡県</div>
+                    <div class="legend-item" title="佐賀県"><div class="legend-mark" style="background: #16a085; opacity: 0.7;"></div>佐賀県</div>
+                    <div class="legend-item" title="長崎県"><div class="legend-mark" style="background: #2c3e50; opacity: 0.7;"></div>長崎県</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel" id="infoPanel" title="使い方とデータ出典情報">
+            <div class="info-header">
+                <button class="close-btn" onclick="toggleInfo()" title="閉じる">×</button>
+            </div>
+            <div class="info-body">
+                <div class="sns-share" title="SNSでシェア">
+                    <a href="#" title="Xでシェア"><img src="img/xicon.png" alt="X"></a>
+                    <a href="#" title="Facebookでシェア"><img src="img/facebookicon.png" alt="Facebook"></a>
+                    <a href="#" title="LINEでシェア"><img src="img/LINEicon.png" alt="LINE"></a>
+                </div>
+                
+                <h3>マップについて</h3>
+                <p>福岡、佐賀、長崎県内で2018～24年に起きた交通事故データのうち、歩行中か自転車に乗っていた1～18歳の子どもが死傷した事故の発生地点を確認できます。</p>
+                
+                <p>丸印をタップ（クリック）すると、事故の概要が表示されます。<br>
+                <small style="color: #666; line-height: 1.5; display: inline-block; margin-top: 5px;">※校区はオープンデータを基に表示しています。北九州市や福岡県飯塚市など校区のデータが存在しない地域があるほか、学校の新設統廃合で現在の校区名と異なる場合があります。</small></p>
+                
+                <p>「サーチ」のボタンに施設名や店舗名を入力すると、そのエリアに移動することができます。</p>
+                
+                <div style="background: #f9f9f9; padding: 12px; border-radius: 6px; margin: 20px 0;">
+                    <p style="margin: 0 0 10px 0; font-size: 0.9rem;">◆大きな赤色の丸が1～5歳、青色の丸が6～12歳、黄色の丸が13～18歳が当事者の事故です。</p>
+                    <p style="margin: 0; font-size: 0.9rem;">◆小さな丸は2019～24年の成人も含む全年齢の交通事故の発生地点です。エリアを広げた際に表示される大きな円に表示された数字は、周囲のエリアでの全年齢の交通事故の発生件数です。</p>
+                </div>
+                
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+                
+                <div style="font-size: 0.8rem; color: #666;">
+                    <p style="margin: 0 0 5px 0;">【大きな丸印のデータの出典：福岡、佐賀、長崎3県警が西日本新聞に提供したデータ】</p>
+                    <p style="margin: 0 0 5px 0;">【小さな丸印の出典：警察庁のオープンデータ】</p>
+                    <p style="margin: 0 0 15px 0;">【校区の出典：国土交通省国土数値情報の小学校区データ、福岡市は福岡市オープンデータの福岡市立小学校通学区域】</p>
+                    
+                    <p style="margin: 0 0 15px 0;">※地図の表示と実際の道路の形状が異なる場合があります。</p>
+                    
+                    <p style="margin: 0;">© Mapbox © OpenStreetMap</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /** * ===================================
+         * 1. 定数・状態管理の定義
+         * ===================================
+         */
+        
+        // Mapbox Studio側で定義されている子どもの事故用レイヤーIDの配列
+        const CHILD_ACCIDENT_LAYERS = ['1-5-2026', '6-12-2026', '13-18-2026'];
+        
+        // 警察庁オープンデータ(NPA)を表示するための各レイヤーIDの配列
+        const NPA_POINT_LAYERS = ['npa-fukuoka-points', 'npa-saga-points', 'npa-nagasaki-points'];     // 単一の事故点
+        const NPA_CLUSTER_LAYERS = ['npa-fukuoka-clusters', 'npa-saga-clusters', 'npa-nagasaki-clusters']; // 密集した事故（クラスター）の円
+        const NPA_COUNT_LAYERS = ['npa-fukuoka-cluster-count', 'npa-saga-cluster-count', 'npa-nagasaki-cluster-count']; // クラスター内の件数テキスト
+        
+        // 小学校区のソースID配列（ON/OFF切り替え用）
+        const DISTRICT_IDS = ['fukuoka-city', 'fukuoka-pref', 'saga', 'nagasaki'];
+
+        // 現在の「事故種別」フィルタ状態 ('all', 'death', 'injury')
+        let currentFilter = 'all';
+        
+        // 現在の「データソース」の表示状態 (true = 表示, false = 非表示)
+        const dataSourceVisible = {
+            children: true,
+            npa: true
+        };
+
+        // 小学校区レイヤーの表示状態
+        let districtVisible = true;
+        
+        /** * ===================================
+         * 2. UI制御・表示切り替えに関する関数群
+         * ===================================
+         */
+        
+        /**
+         * 「使い方」情報パネルの開閉を切り替える関数
+         */
+        function toggleInfo() { 
+            document.getElementById('infoPanel').classList.toggle('open'); 
+        }
+        
+        /**
+         * 「表示データ（子どもの事故/全年齢）」のON/OFFを切り替える関数
+         * @param {string} source - 'children' または 'npa'
+         */
+        function toggleDataSource(source) {
+            // 表示フラグを反転
+            dataSourceVisible[source] = !dataSourceVisible[source];
+            
+            // ボタンの見た目（アクティブクラス）を更新
+            const btn = document.querySelector(`[data-source="${source}"]`);
+            if (dataSourceVisible[source]) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+            
+            // 地図上のレイヤー表示/非表示を適用
+            applyDataSourceVisibility();
+            // 凡例の表示/非表示を更新
+            updateLegendVisibility();
+        }
+
+        /**
+         * 小学校区レイヤーのON/OFFを切り替える関数
+         */
+        function toggleDistrict() {
+            districtVisible = !districtVisible;
+            const btn = document.querySelector('[data-source="district"]');
+            
+            // ボタンの見た目更新
+            if (districtVisible) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+
+            // マップがロードされていなければ終了
+            if (!map.isStyleLoaded()) return;
+
+            // 関連する全てのポリゴン(fill)・ライン(line)の表示を切り替え
+            DISTRICT_IDS.forEach(id => {
+                ['fill', 'line'].forEach(type => {
+                    const layerId = `${id}-${type}`;
+                    if (map.getLayer(layerId)) {
+                        map.setLayoutProperty(
+                            layerId, 
+                            'visibility', 
+                            districtVisible ? 'visible' : 'none'
+                        );
+                    }
+                });
+            });
+        }
+        
+        /**
+         * 地図上のレイヤーに `visibility` プロパティを適用して表示/非表示を制御する関数
+         */
+        function applyDataSourceVisibility() {
+            // マップのスタイルが完全に読み込まれていない場合は処理をスキップ
+            if (!map.isStyleLoaded()) return;
+            
+            // 子どもの事故データの表示制御
+            CHILD_ACCIDENT_LAYERS.forEach(layerId => {
+                if (map.getLayer(layerId)) {
+                    map.setLayoutProperty(
+                        layerId, 
+                        'visibility', 
+                        dataSourceVisible.children ? 'visible' : 'none'
+                    );
+                }
+            });
+            
+            // 警察庁データ（ポイント、クラスター、テキストすべて）の表示制御
+            const allNpaLayers = [...NPA_POINT_LAYERS, ...NPA_CLUSTER_LAYERS, ...NPA_COUNT_LAYERS];
+            allNpaLayers.forEach(layerId => {
+                if (map.getLayer(layerId)) {
+                    map.setLayoutProperty(
+                        layerId, 
+                        'visibility', 
+                        dataSourceVisible.npa ? 'visible' : 'none'
+                    );
+                }
+            });
+        }
+        
+        /**
+         * 凡例（右下のパネル）内の項目の表示/非表示を制御する関数
+         */
+        function updateLegendVisibility() {
+            const childrenLegend = document.getElementById('legend-children');
+            const npaLegend = document.getElementById('legend-npa');
+            
+            if (childrenLegend) {
+                childrenLegend.style.display = dataSourceVisible.children ? 'block' : 'none';
+            }
+            
+            if (npaLegend) {
+                npaLegend.style.display = dataSourceVisible.npa ? 'block' : 'none';
+            }
+        }
+        
+        /** * ===================================
+         * 3. フィルタリング機能（死亡・負傷による絞り込み）
+         * ===================================
+         */
+        
+        /**
+         * 事故種別のボタンが押された際に、状態を更新してフィルタを適用する関数
+         * @param {string} filterType - 'all', 'death', 'injury'
+         */
+        function setFilter(filterType) {
+            currentFilter = filterType;
+            
+            // 全てのフィルタボタンから 'active' クラスを外し、選択されたものにだけ付与する
+            document.querySelectorAll('[data-filter]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+            
+            applyFilter();
+        }
+        
+        /**
+         * 現在の `currentFilter` に基づいて、Mapbox GL JS のフィルター表現（Expression）を生成し適用する関数
+         */
+        function applyFilter() {
+            if (!map.isStyleLoaded()) return;
+            
+            let filter;
+            
+            // 選択されたフィルタ条件に基づいて Mapbox Expression を作成
+            switch(currentFilter) {
+                case 'death':
+                    // 死者数が「0」ではないデータを抽出（0との厳密な区別）
+                    filter = ['!=', ['to-number', ['get', '死者数'], 0], 0];
+                    break;
+                case 'injury':
+                    // 負傷者数が「0」ではないデータを抽出
+                    filter = ['!=', ['to-number', ['get', '負傷者数'], 0], 0];
+                    break;
+                case 'all':
+                default:
+                    // フィルタ条件なし（すべて表示）
+                    filter = null;
+                    break;
+            }
+            
+            // 1. 子どもの事故レイヤーにフィルタを適用
+            CHILD_ACCIDENT_LAYERS.forEach(layerId => {
+                if (map.getLayer(layerId)) {
+                    map.setFilter(layerId, filter);
+                }
+            });
+            
+            // 2. 警察庁(NPA)の全レイヤーに適用
+            const allNpaLayers = [...NPA_POINT_LAYERS, ...NPA_CLUSTER_LAYERS, ...NPA_COUNT_LAYERS];
+            allNpaLayers.forEach(layerId => {
+                if (map.getLayer(layerId)) {
+                    
+                    // NPAレイヤーはクラスター化（円の結合）されているため、
+                    // 「クラスターそのもの（件数表示用）」と「結合されていない単独ポイント」で基本条件が異なります。
+                    const isClusterRelated = layerId.includes('cluster') || layerId.includes('count');
+                    
+                    // クラスターレイヤーなら point_count を持っているもの、ポイントレイヤーなら持っていないものを基本条件とする
+                    const baseCondition = isClusterRelated ? ['has', 'point_count'] : ['!', ['has', 'point_count']];
+                    
+                    if (filter) {
+                        // 絞り込み条件が存在する場合、「基本条件 かつ(all) 絞り込み条件」として適用
+                        map.setFilter(layerId, ['all', baseCondition, filter]);
+                    } else {
+                        // 全て表示の場合は基本条件のみ適用
+                        map.setFilter(layerId, baseCondition);
+                    }
+                }
+            });
+        }
+        
+        /** * ===================================
+         * 4. Mapbox マップの初期化・設定
+         * ===================================
+         */
+        
+        // 画面幅が768px以下であればモバイル端末と判定
+        const isMobile = window.innerWidth <= 768;
+        
+        // Mapboxアクセストークンの設定
+        mapboxgl.accessToken = 'pk.eyJ1Ijoibm5wZGF0YSIsImEiOiJjbHBnbTV6cXIwd2p2MmlwYWxnYWg1bnh3In0.vDZxaboMvN72PFLaztqqnA';
+
+        // マップインスタンスの生成
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/nnpdata/cmltbr9u2001a01sn7mxd8zqk', // 西日本新聞カスタムスタイル
+            
+            // 【天神南駅周辺の表示設定】
+            center: [130.402, 33.586],    // 天神南駅付近の経度・緯度 [lng, lat]
+            zoom: isMobile ? 14.0 : 15.0, // スマホなら14.0、PCなら15.0付近
+            
+            pitchWithRotate: false,     // 3D傾斜を無効化
+            dragRotate: false           // 回転操作を無効化
+        });
+        
+        // ポップアップインスタンスの生成（共通で使用）
+        const popup = new mapboxgl.Popup({ 
+            closeButton: false, // 独自の閉じるボタン等を使用せず、外側クリックで閉じる挙動にする
+            maxWidth: '400px',
+            offset: 15          // ピンからの距離
+        });
+
+        /**
+         * ポップアップ表示時における凡例UIとの干渉（重なり）を防ぐための設定関数
+         */
+        function setupPopupLegendInteraction() {
+            const legend = document.getElementById('legend');
+            
+            // ポップアップが開いた時、スマホ画面なら凡例を自動的に隠す
+            popup.on('open', () => {
+                if (isMobile) {
+                    legend.classList.add('auto-hide-mobile');
+                }
+            });
+            
+            // ポップアップが閉じた時、スマホ画面なら凡例を再表示する
+            popup.on('close', () => {
+                if (isMobile) {
+                    legend.classList.remove('auto-hide-mobile');
+                }
+            });
+            
+            // 地図の余白（データがない部分）をクリックした際の対応
+            map.on('click', (e) => {
+                const features = map.queryRenderedFeatures(e.point, {
+                    layers: [...CHILD_ACCIDENT_LAYERS, ...NPA_POINT_LAYERS]
+                });
+                
+                // データ点以外をクリックし、かつスマホ画面の場合は少し遅延させて凡例を戻す
+                if (features.length === 0 && isMobile) {
+                    setTimeout(() => {
+                        legend.classList.remove('auto-hide-mobile');
+                    }, 100);
+                }
+            });
+        }
+
+        // カスタムスタイルにおいてアイコン画像が見つからない場合のダミー画像を生成するエラーハンドリング
+        map.on('styleimagemissing', (e) => {
+            if (!map.hasImage(e.id)) {
+                map.addImage(e.id, { 
+                    width: 1, 
+                    height: 1, 
+                    data: new Uint8Array(4) // 透明な1x1ピクセルを生成
+                });
+            }
+        });
+
+        /**
+         * マップの初期ロードが完了したあとに実行されるメイン処理
+         * データソースの追加、レイヤーの生成、UIコントロールの追加を行います。
+         */
+        map.on('load', () => {
+            const layers = map.getStyle().layers;
+            
+            // ズームボタンコントロールを追加（右上に配置）
+            map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+            
+            // スケール（縮尺バー）を追加（右下に配置）
+            map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), 'bottom-right');
+
+            // 追加するGeoJSONレイヤーが、既存のラベル（文字）レイヤーよりも下（背面）に描画されるようアンカーを探す
+            let lowestChildLayerId = null;
+            for (const layer of layers) {
+                if (CHILD_ACCIDENT_LAYERS.includes(layer.id)) {
+                    if (!lowestChildLayerId) lowestChildLayerId = layer.id;
+                }
+            }
+            const anchorLayer = lowestChildLayerId || 'waterway-label';
+
+            // 小学校区ポリゴンデータの定義
+            const districtSources = [
+                { id: 'fukuoka-city', url: './geojson/fukuoka.geojson', lineWidth: 3, opacity: 0.85 },
+                { id: 'fukuoka-pref', url: './geojson/fukpref.geojson', lineWidth: 2.5, opacity: 0.75 },
+                { id: 'saga', url: './geojson/sagamap.geojson', lineWidth: 2.5, opacity: 0.75 },
+                { id: 'nagasaki', url: './geojson/nagamap.geojson', lineWidth: 2.5, opacity: 0.75 }
+            ];
+
+            // 小学校区データの読み込みとレイヤー追加
+            districtSources.forEach(district => {
+                map.addSource(district.id, { type: 'geojson', data: district.url });
+                
+                // 塗りつぶしレイヤー（透明に設定してクリック判定用とする）
+                map.addLayer({
+                    id: `${district.id}-fill`, type: 'fill', source: district.id, paint: { 'fill-color': '#000', 'fill-opacity': 0 }
+                }, anchorLayer);
+                
+                // 境界線レイヤー（デザインに合わせて落ち着いたブルーグレーへ変更）
+                map.addLayer({
+                    id: `${district.id}-line`, type: 'line', source: district.id,
+                    paint: { 'line-color': '#78909c', 'line-width': district.lineWidth, 'line-opacity': district.opacity }
+                }, anchorLayer);
+            });
+
+            // 警察庁オープンデータ(NPA)の定義。色をモダンなトーンに変更。
+            const npaFiles = [
+                { id: 'npa-fukuoka', url: './geojson/npa_fuk.geojson', color: '#8e44ad', name: '福岡県' },
+                { id: 'npa-saga', url: './geojson/npa_saga.geojson', color: '#16a085', name: '佐賀県' },
+                { id: 'npa-nagasaki', url: './geojson/npa_naga.geojson', color: '#2c3e50', name: '長崎県' }
+            ];
+            
+            // NPAデータをフェッチ（非同期取得）してクラスター設定とともにマップに追加
+            npaFiles.forEach(file => {
+                fetch(file.url)
+                    .then(res => res.json())
+                    .then(geojson => {
+                        map.addSource(file.id, {
+                            type: 'geojson',
+                            data: geojson,
+                            cluster: true, // 点が密集している場合にまとめる（クラスター化）
+                            clusterRadius: 50,
+                            clusterMinPoints: 10,
+                            // クラスター内部の死者数・負傷者数を合算するプロパティを定義
+                            clusterProperties: {
+                                'death_sum': ['+', ['to-number', ['get', '死者数'], 0]],
+                                'injury_sum': ['+', ['to-number', ['get', '負傷者数'], 0]]
+                            }
+                        });
+                        
+                        // 1. クラスター化されていない単独の点レイヤー
+                        map.addLayer({
+                            id: `${file.id}-points`, type: 'circle', source: file.id, filter: ['!', ['has', 'point_count']],
+                            paint: { 'circle-color': file.color, 'circle-radius': 7, 'circle-opacity': 0.6, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': 0.9 }
+                        }, anchorLayer);
+                        
+                        // 2. クラスター（まとまった点）の円レイヤー
+                        map.addLayer({
+                            id: `${file.id}-clusters`, type: 'circle', source: file.id, filter: ['has', 'point_count'],
+                            paint: { 'circle-color': file.color, 'circle-opacity': 0.7, 'circle-radius': [ 'step', ['get', 'point_count'], 18, 50, 28, 200, 38 ] }
+                        });
+                        
+                        // 3. クラスター内の件数テキスト表示レイヤー
+                        map.addLayer({
+                            id: `${file.id}-cluster-count`, type: 'symbol', source: file.id, filter: ['has', 'point_count'],
+                            layout: { 'text-field': '{point_count_abbreviated}', 'text-size': 13, 'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'] },
+                            paint: { 'text-color': '#fff' }
+                        });
+                        
+                        // NPA単独ポイントのクリックイベント（ポップアップ表示）
+                        map.on('click', `${file.id}-points`, (e) => { showNpaPopup(e, file.name); });
+                        
+                        // クラスター円のクリックイベント（その場所へズームインする）
+                        map.on('click', `${file.id}-clusters`, (e) => {
+                            const features = map.queryRenderedFeatures(e.point, { layers: [`${file.id}-clusters`] });
+                            const clusterId = features[0].properties.cluster_id;
+                            
+                            map.getSource(file.id).getClusterExpansionZoom(clusterId, (err, zoom) => {
+                                if (err) return;
+                                map.easeTo({ center: features[0].geometry.coordinates, zoom: zoom });
+                            });
+                        });
+                        
+                        // マウスホバー時にカーソルを「指マーク」に変更
+                        const interactionLayers = [`${file.id}-points`, `${file.id}-clusters`];
+                        interactionLayers.forEach(l => {
+                            map.on('mouseenter', l, () => map.getCanvas().style.cursor = 'pointer');
+                            map.on('mouseleave', l, () => map.getCanvas().style.cursor = '');
+                        });
+                    })
+                    .catch(e => console.error(`${file.name} データ読み込みエラー:`, e));
+            });
+            
+            // 凡例の相互作用設定を初期化
+            setupPopupLegendInteraction();
+        });
+        
+        // スタイルやデータの変更が行われた後にフィルタと表示設定を再適用する
+        map.on('styledata', () => {
+            applyFilter();
+            applyDataSourceVisibility();
+            
+            // スタイル再読み込み時に校区レイヤーの表示状態(ON/OFF)も維持して反映させる
+            if (!districtVisible) {
+                DISTRICT_IDS.forEach(id => {
+                    ['fill', 'line'].forEach(type => {
+                        const layerId = `${id}-${type}`;
+                        if (map.getLayer(layerId)) {
+                            map.setLayoutProperty(layerId, 'visibility', 'none');
+                        }
+                    });
+                });
+            }
+        });
+
+        /** * ===================================
+         * 5. ヘルパー関数（データ整形・表示用ユーティリティ）
+         * ===================================
+         */
+
+        /**
+         * 曜日文字列をフォーマットする関数
+         */
+        function formatDayOfWeek(dayStr) {
+            if (!dayStr) return '';
+            let day = dayStr.replace(/[()（）]/g, ''); 
+            if (day.length === 1) day = day + '曜';    
+            return day;
+        }
+
+        /**
+         * 日付（年月日）と時間（午前午後）の間に曜日を正しく挿入する関数
+         */
+        function formatDateTimeWithDay(datetimeStr, dayStr) {
+            if (!datetimeStr) return '日時不明';
+            const day = formatDayOfWeek(dayStr);
+            if (!day) return datetimeStr;
+            
+            // 「日」の文字を正確に基準にするためキャプチャグループを ^(.*?日)(.*)$ に設定
+            const match = datetimeStr.match(/^(.*?日)(.*)$/);
+            if (match) {
+                return `${match[1]}${day}${match[2]}`; // 日付部分 + 曜日 + 時間部分
+            }
+            return `${datetimeStr} ${day}`;
+        }
+        
+        /**
+         * 県名からデータ提供元のテキストを生成する関数
+         */
+        function getPrefecturePoliceSource(prefName) {
+            if (prefName.includes('福岡')) return '福岡県警提供のデータ';
+            if (prefName.includes('佐賀')) return '佐賀県警提供のデータ';
+            if (prefName.includes('長崎')) return '長崎県警提供のデータ';
+            return '各県警提供のデータ';
+        }
+        
+        /**
+         * 当事者の年齢文字列から背景色と文字色を決定する関数
+         * （子どもの事故データ専用のハイライト処理）
+         */
+        function getAgeHighlight(ageStr) {
+            if (!ageStr) return null;
+            const str = ageStr.toString();
+            
+            const match = str.match(/(\d+)/); 
+            if (!match) return null;
+            
+            const age = parseInt(match[0], 10);
+            if (age >= 0 && age <= 5) return { bg: '#ffe0e0', color: '#c0392b' }; 
+            if (age >= 6 && age <= 12) return { bg: '#e0f3ff', color: '#2980b9' }; 
+            if (age >= 13 && age <= 18) return { bg: '#fffbd0', color: '#f39c12' }; 
+            return null;
+        }
+
+        /**
+         * 当事者情報のHTMLパーツを作成する共通関数
+         * 【修正】applyHighlightフラグを追加し、子どもの事故のみハイライト（色づけ）を実行します。
+         */
+        function formatParty(type, age, injury, applyHighlight) {
+            let ageHtml = age || '-';
+            
+            // 子どもの事故の場合のみ、色付きバッジ化の判定を行う
+            if (applyHighlight) {
+                const hl = getAgeHighlight(age);
+                if (hl) {
+                    ageHtml = `<span class="age-highlight" style="background:${hl.bg}; color:${hl.color};">${age}</span>`;
+                }
+            }
+            
+            return `<div>${type || '-'} (${ageHtml})</div><span class="sub-info">${injury || '-'}</span>`;
+        }
+
+        /** * ===================================
+         * 6. ポップアップ生成関数
+         * ===================================
+         */
+
+        /**
+         * 子どもの事故データのポップアップ
+         */
+        function showPopup(e) {
+            const p = e.features[0].properties;
+            const queryLayers = ['fukuoka-city-fill', 'fukuoka-pref-fill', 'saga-fill', 'nagasaki-fill'];
+            const features = map.queryRenderedFeatures(e.point, { layers: queryLayers });
+            
+            let district = '校区情報なし';
+            let prefecture = '';
+            
+            if (features.length > 0) {
+                const props = features[0].properties;
+                const layerId = features[0].layer.id;
+                
+                if (layerId.includes('fukuoka')) prefecture = '福岡県';
+                else if (layerId.includes('saga')) prefecture = '佐賀県';
+                else if (layerId.includes('nagasaki')) prefecture = '長崎県';
+                
+                if (props['校区名']) {
+                    let schoolName = props['校区名'].replace(/小学校$/, '');
+                    district = schoolName.includes('校区') ? `${schoolName} (福岡市)` : `${schoolName}小学校区 (福岡市)`;
+                } else if (props['A27_004']) { 
+                    const schoolName = props['A27_004'].replace(/小学校$/, '');
+                    const setter = props['A27_002'] || ''; 
+                    const cityMatch = setter.match(/^(.+?)(市|町|村)(立)?/);
+                    let cityName = cityMatch ? cityMatch[1] + cityMatch[2] : setter.replace(/立$/, '');
+                    district = `${schoolName}小学校区 (${prefecture}${cityName})`;
+                }
+            }
+
+            const deathCount = parseInt(p["死者数"], 10) || 0;
+            const injuryCount = parseInt(p["負傷者数"], 10) || 0;
+            
+            const deathClass = deathCount !== 0 ? 'death-count' : '';
+            const injuryClass = injuryCount !== 0 ? 'injury-count' : '';
+            const criticalInfoHtml = `<div class="critical-info">
+                <span class="${deathClass}">死者: ${deathCount}人</span>
+                <span class="${injuryClass}">負傷者: ${injuryCount}人</span>
+            </div>`;
+
+            const formattedDate = formatDateTimeWithDay(p["発生年月日時"] || p["発生年月日"], p["発生曜日"]);
+            
+            // 【修正】第4引数に true を渡し、年齢の色づけ（ハイライト）を適用する
+            const html = `
+                <div class="popup-title">${formattedDate}</div>
+                ${criticalInfoHtml}
+                <table>
+                    <tr><td>校区</td><td><strong>${district}</strong></td></tr>
+                    ${p["事故内容"] ? `<tr><td>事故内容</td><td>${p["事故内容"]}</td></tr>` : ''}
+                    ${p["事故類型"] ? `<tr><td>事故類型</td><td>${p["事故類型"]}</td></tr>` : ''}
+                    <tr><td>当事者A</td><td>${formatParty(p["当事者種別（当事者A）"], p["年齢（当事者A）"], p["人身損傷程度（当事者A）"], true)}</td></tr>
+                    <tr><td>当事者B</td><td>${formatParty(p["当事者種別（当事者B）"], p["年齢（当事者B）"], p["人身損傷程度（当事者B）"], true)}</td></tr>
+                </table>
+                <div style="font-size: 0.75rem; color: #999; margin-top: 8px; text-align: right;">${getPrefecturePoliceSource(prefecture || district)}</div>`;
+            
+            popup.setLngLat(e.features[0].geometry.coordinates.slice()).setHTML(html).addTo(map);
+        }
+
+        /**
+         * 警察庁オープンデータ(NPA)のポップアップ
+         */
+        function showNpaPopup(e, prefName) {
+            const p = e.features[0].properties;
+            const deathCount = parseInt(p["死者数"], 10) || 0;
+            const injuryCount = parseInt(p["負傷者数"], 10) || 0;
+            
+            const deathClass = deathCount !== 0 ? 'death-count' : '';
+            const injuryClass = injuryCount !== 0 ? 'injury-count' : '';
+            const criticalInfoHtml = `<div class="critical-info">
+                <span class="${deathClass}">死者: ${deathCount}人</span>
+                <span class="${injuryClass}">負傷者: ${injuryCount}人</span>
+            </div>`;
+            
+            const formattedDate = formatDateTimeWithDay(p["発生年月日時"] || p["発生年月日"], p["発生曜日"]);
+            
+            // 【修正】第4引数に false を渡し、全年齢データでは年齢の色づけを行わない
+            const html = `
+                <div class="popup-title">${formattedDate}</div>
+                ${criticalInfoHtml}
+                <table>
+                    ${p["事故内容"] ? `<tr><td>事故内容</td><td>${p["事故内容"]}</td></tr>` : ''}
+                    ${p["事故類型"] ? `<tr><td>事故類型</td><td>${p["事故類型"]}</td></tr>` : ''}
+                    <tr><td>当事者A</td><td>${formatParty(p["当事者種別（当事者A）"], p["年齢（当事者A）"], p["人身損傷程度（当事者A）"], false)}</td></tr>
+                    <tr><td>当事者B</td><td>${formatParty(p["当事者種別（当事者B）"], p["年齢（当事者B）"], p["人身損傷程度（当事者B）"], false)}</td></tr>
+                </table>
+                <div style="font-size: 0.75rem; color: #999; margin-top: 8px; text-align: right;">警察庁オープンデータ</div>`;
+            
+            popup.setLngLat(e.features[0].geometry.coordinates.slice()).setHTML(html).addTo(map);
+        }
+
+        map.on('idle', () => {
+            CHILD_ACCIDENT_LAYERS.forEach(id => {
+                if (map.getLayer(id)) {
+                    map.on('click', id, showPopup);
+                    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+                    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+                }
+            });
+        });
+
+        /** * ===================================
+         * 7. Mapbox Search Box (住所検索) の初期化とカスタマイズ
+         * ===================================
+         */
+        function initSearch() {
+            if (window.MapboxSearchBox && map && !window.searchInitialized) {
+                const search = new MapboxSearchBox();
+                search.accessToken = mapboxgl.accessToken;
+                search.options = { 
+                    language: 'ja', 
+                    country: 'JP', 
+                    proximity: [130.2, 33.0] 
+                };
+                search.marker = true;
+                search.mapboxgl = mapboxgl;
+                
+                map.addControl(search, 'top-left');
+                window.searchInitialized = true;
+                
+                const customText = '住所や施設名を入力してください';
+                
+                const observer = new MutationObserver(() => {
+                    const searchBoxHost = document.querySelector('mapbox-search-box');
+                    let isChanged = false;
+                    
+                    if (searchBoxHost) {
+                        if (searchBoxHost.getAttribute('placeholder') !== customText) {
+                            searchBoxHost.setAttribute('placeholder', customText);
+                        }
+                        
+                        if (searchBoxHost.shadowRoot) {
+                            const internalInput = searchBoxHost.shadowRoot.querySelector('input');
+                            if (internalInput && internalInput.placeholder !== customText) {
+                                internalInput.placeholder = customText;
+                                isChanged = true;
+                            }
+                        }
+                    }
+                    
+                    const standardInput = document.querySelector('.mapboxgl-ctrl-search-box input, input[class*="SearchInput"]');
+                    if (standardInput && standardInput.placeholder !== customText) {
+                        standardInput.placeholder = customText;
+                        isChanged = true;
+                    }
+                    
+                    if (isChanged) {
+                        observer.disconnect();
+                    }
+                });
+                
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+        }
+        
+        if (window.MapboxSearchBox) {
+            initSearch();
+        } else {
+            document.getElementById('search-js').addEventListener('load', initSearch);
+        }
+        map.once('load', initSearch);
+
+        // 検索ボックスへの入力中（フォーカス時）は、凡例を一時的に隠して結果を見やすくする
+        document.addEventListener('focusin', (e) => {
+            if (e.target.tagName.toLowerCase() === 'input' || e.target.closest('mapbox-search-box')) {
+                document.getElementById('legend').classList.add('hidden');
+            }
+        });
+        
+        document.addEventListener('focusout', (e) => {
+            if (e.target.tagName.toLowerCase() === 'input' || e.target.closest('mapbox-search-box')) {
+                setTimeout(() => {
+                    document.getElementById('legend').classList.remove('hidden');
+                }, 300); // 検索結果リストをタップする余裕を持たせるためのディレイ
+            }
+        });
+
+    </script>
+</body>
+</html>
