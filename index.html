@@ -22,27 +22,27 @@
             margin: 0; 
             font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; 
             height: 100vh; 
-            height: 100svh; /* スマホのブラウザUIを考慮した高さ設定 */
-            overflow: hidden; 
+            height: 100svh; /* スマホブラウザのアドレスバーを考慮した高さ設定 */
+            overflow: hidden; /* 画面外のスクロールを防止 */
             color: #333; 
         }
         
         /* =========================================
-           【重要】Z-index（重なり順）の厳格な階層ルール
+           【抜本的改善】Z-index（重なり順）の厳格な階層ルール
            ========================================= */
-        /* 1. 情報パネル(使い方): 最前面 */
+        /* 1. 情報パネル(使い方): 最前面（すべての上に被さる） */
         .info-panel { z-index: 9999 !important; }
         
         /* 2. マップ上のポップアップ: パネルの次 */
         .mapboxgl-popup { z-index: 4000 !important; max-width: 400px !important; }
         
-        /* 3. 検索ボックス(左上): ポップアップの下、パネル類の上 */
+        /* 3. 検索ボックス(予測変換リスト含む): ポップアップの下、ヘッダーの上 */
         .mapboxgl-ctrl-top-left { z-index: 2000 !important; }
         
-        /* 4. ヘッダー: 検索ボックスの下 */
+        /* 4. ヘッダー: 固定UIとして上部に配置 */
         .header { z-index: 100; }
         
-        /* 5. マップUI(ズーム、スケール)と独自パネル(凡例、操作): 背面寄り */
+        /* 5. その他のMapbox標準UI(ズームなど)と独自UI: 背面寄り */
         .mapboxgl-ctrl-top-right,
         .mapboxgl-ctrl-bottom-left,
         .mapboxgl-ctrl-bottom-right { z-index: 20 !important; }
@@ -64,6 +64,7 @@
             font-weight: bold; 
             color: #222;
         }
+        
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th, td { border: 1px solid #e5e5e5; padding: 7px 9px; vertical-align: middle; }
         td:first-child { background-color: #f9f9f9; font-weight: bold; color: #555; white-space: nowrap; width: 30%; }
@@ -83,7 +84,7 @@
         .sub-info { font-size: 0.85rem; color: #666; display: block; margin-top: 3px; }
         
         /* =========================================
-           UIコンポーネント（ヘッダー、パネル、凡例）
+           UIコンポーネント（ヘッダー、パネル）
            ========================================= */
         .container { height: 100%; display: flex; flex-direction: column; }
         
@@ -106,7 +107,7 @@
         #map { width: 100%; height: 100%; }
         
         /* =========================================
-           コントロールパネル（スリム化＆グラスモーフィズム）
+           PC版コントロールパネル（グラスモーフィズム）
            ========================================= */
         .control-panel {
             position: absolute;
@@ -121,23 +122,9 @@
             max-width: 340px; 
         }
         
-        /* 操作ガイドの注記（スッキリとしたテキストへ） */
-        .touch-guide {
-            font-size: 0.75rem;
-            color: #666;
-            margin-bottom: 12px;
-            font-weight: bold;
-        }
+        .touch-guide { display: none; } /* PCでは非表示 */
         
-        /* 横並びレイアウト（表示データと背景表示を並べる用） */
-        .panel-row {
-            display: flex;
-            gap: 10px;
-        }
-        .panel-row .control-section {
-            margin-bottom: 15px;
-        }
-        
+        .panel-row { display: flex; gap: 10px; }
         .control-section { margin-bottom: 15px; }
         .control-section:last-child { margin-bottom: 0; }
         .control-section-title {
@@ -146,9 +133,7 @@
         }
         .control-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
         
-        /* =========================================
-           チェックボックス風のボタンスタイル
-           ========================================= */
+        /* チェックボックス風のボタンスタイル */
         .control-btn {
             position: relative;        
             background: #fff;
@@ -165,7 +150,6 @@
         }
         .control-btn:hover { background: #f8f8f8; }
         
-        /* 四角い枠・丸い枠 */
         .control-btn::before {
             content: ''; position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
             width: 14px; height: 14px; border: 2px solid #bbb; border-radius: 3px;
@@ -173,7 +157,6 @@
         }
         .control-btn[data-filter]::before { border-radius: 50%; }
 
-        /* チェックマーク・丸ポチ */
         .control-btn::after { content: ''; position: absolute; opacity: 0; transition: opacity 0.2s; }
         .control-btn:not([data-filter])::after {
             left: 12.5px; top: 50%; width: 4px; height: 8px;
@@ -184,7 +167,6 @@
             background-color: #fff; border-radius: 50%; transform: translateY(-50%);
         }
 
-        /* アクティブ時の各ボタンの背景色・枠線色設定 */
         .control-btn.active { color: #fff; }
         .control-btn.children.active { background: #29abe2; border-color: #29abe2; }
         .control-btn.npa.active { background: #6c757d; border-color: #6c757d; }
@@ -197,24 +179,29 @@
         .control-btn.active::after { opacity: 1; }
         
         /* =========================================
-           凡例パネル
+           凡例パネル（折りたたみ対応版）
            ========================================= */
         .legend { 
-            position: absolute; 
-            bottom: 30px; 
-            left: 15px; 
-            background: rgba(255,255,255,0.92);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 14px 16px; 
-            border-radius: 10px; 
-            box-shadow: 0 3px 20px rgba(0,0,0,0.18); 
-            font-size: 0.9rem; 
-            max-width: 250px;
-            transition: opacity 0.3s ease, transform 0.3s ease;
+            position: absolute; bottom: 30px; left: 15px; 
+            background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 14px 16px; border-radius: 10px; box-shadow: 0 3px 20px rgba(0,0,0,0.18); 
+            font-size: 0.9rem; max-width: 250px; transition: opacity 0.3s ease, transform 0.3s ease;
         }
         .legend.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; }
-        .legend h4 { margin: 0 0 12px; border-bottom: 2px solid #f15a24; padding-bottom: 6px; color: #222; font-size: 1rem; }
+        
+        /* タイトル部分をタップ可能にする */
+        .legend h4 { 
+            margin: 0 0 12px; border-bottom: 2px solid #f15a24; padding-bottom: 6px; 
+            color: #222; font-size: 1rem; display: flex; justify-content: space-between; 
+            align-items: center; cursor: pointer; user-select: none;
+        }
+        .legend-arrow { font-size: 0.7rem; color: #999; transition: transform 0.3s ease; }
+        
+        /* 折りたたまれた時のスタイル */
+        .legend.is-collapsed h4 { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .legend.is-collapsed .legend-content { display: none; }
+        .legend.is-collapsed .legend-arrow { transform: rotate(-90deg); }
+
         .legend-section { margin-bottom: 12px; }
         .legend-section:last-child { margin-bottom: 0; }
         .legend-subtitle { font-size: 0.8rem; color: #666; margin-bottom: 6px; font-weight: bold; }
@@ -224,20 +211,22 @@
         
         /* 使い方・情報パネル */
         .info-panel { 
-            position: absolute; top: 0; right: -100%; width: 90%; max-width: 420px; 
-            height: 100%; background: #fff; transition: right 0.3s ease; 
-            box-shadow: -5px 0 20px rgba(0,0,0,0.2); display: flex; flex-direction: column; 
+            position: absolute; top: 0; right: -100%; width: 90%; max-width: 420px; height: 100%; 
+            background: #fff; transition: right 0.3s ease; box-shadow: -5px 0 20px rgba(0,0,0,0.2); 
+            display: flex; flex-direction: column; 
         }
         .info-panel.open { right: 0; }
         .info-header { display: flex; justify-content: flex-end; padding: 10px; }
         .close-btn { background: none; border: none; font-size: 2rem; color: #999; cursor: pointer; }
         .info-body { flex-grow: 1; overflow-y: auto; padding: 0 25px 40px; line-height: 1.8; }
+        
+        /* SNSシェアボタン群 */
         .sns-share { display: flex; gap: 15px; margin-bottom: 25px; }
         .sns-share img { width: 36px; height: 36px; opacity: 0.8; transition: opacity 0.2s; }
         .sns-share img:hover { opacity: 1; }
         
         /* =========================================
-           レスポンシブ対応（スマートフォン・iPhone向け最適化）
+           【抜本的改善】スマートフォン向け最適化（横スクロールレイアウト）
            ========================================= */
         @media (max-width: 768px) {
             .header { height: auto; min-height: 60px; padding: 8px 10px; }
@@ -245,33 +234,57 @@
             .logo-area img { height: 24px; margin-right: 6px; }
             .menu-btn { font-size: 0.75rem; padding: 6px 8px; }
             
-            /* iPhoneのジェスチャー領域(Home Indicator)と干渉しないように安全余白を追加 */
+            /* iPhoneの干渉を防ぐ！下部に1行で収まる横スクロールバーに変更 */
             .control-panel {
                 top: auto; 
-                bottom: calc(15px + env(safe-area-inset-bottom, 0px)); 
-                left: 10px; right: 10px;
-                max-width: none;
-                padding: 10px 12px;
+                bottom: 0; left: 0; right: 0;
+                max-width: 100%;
+                border-radius: 16px 16px 0 0; /* 上部のみ角丸 */
+                /* iPhoneのジェスチャー領域(Home Indicator)を避ける安全余白を確保 */
+                padding: 12px 10px calc(12px + env(safe-area-inset-bottom, 0px));
+                
+                /* フレックスボックスで横スクロールを実装 */
+                display: flex;
+                flex-direction: row;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                gap: 8px;
+                box-shadow: 0 -2px 15px rgba(0,0,0,0.1);
+                
+                /* スクロールバーを見えなくする */
+                scrollbar-width: none;
             }
-            .touch-guide { font-size: 0.7rem; margin-bottom: 8px; }
+            .control-panel::-webkit-scrollbar { display: none; }
             
-            /* 横並びの列間隔を詰める */
-            .panel-row { gap: 8px; }
-            .panel-row .control-section { margin-bottom: 10px; }
+            /* 横並びにするため、不要な見出しやラッパーの縦並びを解除 */
+            .control-section-title { display: none; }
+            .panel-row, .control-section, .control-buttons {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                margin: 0 !important;
+                padding: 0;
+                gap: 8px;
+            }
             
-            /* スマホでボタンが干渉しないような文字サイズと余白 */
-            .control-section-title { font-size: 0.7rem; margin-bottom: 6px; }
-            .control-btn { font-size: 0.75rem; padding: 6px 8px 6px 24px; }
-            .control-btn::before { left: 6px; width: 12px; height: 12px; }
-            .control-btn:not([data-filter])::after { left: 10px; }
-            .control-btn[data-filter]::after { left: 9px; width: 6px; height: 6px; }
+            /* スマホ用ボタン（丸みを帯びたピル形状に変更） */
+            .control-btn { 
+                flex: 0 0 auto; /* 文字数に合わせて幅を確保し、縮ませない */
+                font-size: 0.8rem; 
+                padding: 8px 14px 8px 30px; 
+                border-radius: 20px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            }
+            .control-btn::before { left: 10px; }
+            .control-btn:not([data-filter])::after { left: 14.5px; }
+            .control-btn[data-filter]::after { left: 14px; }
             
-            /* 凡例を検索ボックスの下にコンパクトに配置 */
+            /* スマホでは凡例を左上に配置＆コンパクト化 */
             .legend { 
                 bottom: auto; top: 65px; left: 10px; 
-                padding: 8px 10px; font-size: 0.75rem; max-width: 140px;
+                padding: 10px 12px; font-size: 0.75rem; max-width: 160px;
             }
-            .legend h4 { font-size: 0.85rem; margin-bottom: 8px; }
+            .legend h4 { font-size: 0.85rem; }
             .legend-subtitle { font-size: 0.7rem; }
             .legend-item { margin-bottom: 4px; }
             
@@ -281,19 +294,9 @@
             table { font-size: 0.8rem; }
             th, td { padding: 5px 6px; }
             .critical-info { padding: 6px; margin: 6px 0; font-size: 0.85rem; }
-            .legend.auto-hide-mobile { display: none; }
             
-            /* スケールバー（縮尺）をパネルより上に移動 */
-            .mapboxgl-ctrl-bottom-right, .mapboxgl-ctrl-bottom-left {
-                bottom: calc(160px + env(safe-area-inset-bottom, 0px)) !important;
-            }
-        }
-        
-        /* 非常に小さい端末向け（iPhone SEなど） */
-        @media (max-width: 360px) {
-            .header h1 { font-size: 0.75rem; }
-            .control-btn { font-size: 0.65rem; padding: 6px 4px 6px 20px; }
-            .legend { max-width: 130px; font-size: 0.7rem; }
+            /* スマホの小さな画面を圧迫しないよう、検索時などは凡例を隠す */
+            .legend.auto-hide-mobile { display: none; }
         }
     </style>
 </head>
@@ -314,7 +317,6 @@
             <div id="map" title="インタラクティブ地図"></div>
             
             <div class="control-panel" title="表示データと事故種別の切り替え">
-                <div class="touch-guide">該当ボタンを押して表示を切り替え</div>
                 
                 <div class="panel-row">
                     <div class="control-section" style="flex: 1.2;">
@@ -350,21 +352,28 @@
             </div>
             
             <div class="legend" id="legend" title="凡例">
-                <h4>凡例</h4>
-                <div class="legend-section">
-                    <div class="legend-item" title="小学校区"><div class="legend-line"></div>小学校区</div>
-                </div>
-                <div class="legend-section" id="legend-children">
-                    <div class="legend-subtitle">子どもの事故(2018-24)</div>
-                    <div class="legend-item" title="1～5歳"><div class="legend-mark" style="background: #f15a24;"></div>1～5歳</div>
-                    <div class="legend-item" title="6～12歳"><div class="legend-mark" style="background: #29abe2;"></div>6～12歳</div>
-                    <div class="legend-item" title="13～18歳"><div class="legend-mark" style="background: #fcd621;"></div>13～18歳</div>
-                </div>
-                <div class="legend-section" id="legend-npa">
-                    <div class="legend-subtitle">全年齢の事故(2019-24)</div>
-                    <div class="legend-item" title="福岡県"><div class="legend-mark" style="background: #8e44ad; opacity: 0.7;"></div>福岡県</div>
-                    <div class="legend-item" title="佐賀県"><div class="legend-mark" style="background: #16a085; opacity: 0.7;"></div>佐賀県</div>
-                    <div class="legend-item" title="長崎県"><div class="legend-mark" style="background: #2c3e50; opacity: 0.7;"></div>長崎県</div>
+                <h4 onclick="toggleLegend()">凡例 <span class="legend-arrow" id="legend-arrow">▼</span></h4>
+                
+                <div class="legend-content" id="legend-content">
+                    <div class="legend-section">
+                        <div class="legend-item" title="小学校区">
+                            <div class="legend-line"></div>小学校区
+                        </div>
+                    </div>
+                    
+                    <div class="legend-section" id="legend-children">
+                        <div class="legend-subtitle">子どもの事故(2018-24)</div>
+                        <div class="legend-item" title="1～5歳"><div class="legend-mark" style="background: #f15a24;"></div>1～5歳</div>
+                        <div class="legend-item" title="6～12歳"><div class="legend-mark" style="background: #29abe2;"></div>6～12歳</div>
+                        <div class="legend-item" title="13～18歳"><div class="legend-mark" style="background: #fcd621;"></div>13～18歳</div>
+                    </div>
+                    
+                    <div class="legend-section" id="legend-npa">
+                        <div class="legend-subtitle">全年齢の事故(2019-24)</div>
+                        <div class="legend-item" title="福岡県"><div class="legend-mark" style="background: #8e44ad; opacity: 0.7;"></div>福岡県</div>
+                        <div class="legend-item" title="佐賀県"><div class="legend-mark" style="background: #16a085; opacity: 0.7;"></div>佐賀県</div>
+                        <div class="legend-item" title="長崎県"><div class="legend-mark" style="background: #2c3e50; opacity: 0.7;"></div>長崎県</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -416,12 +425,23 @@
         const dataSourceVisible = { children: true, npa: true };
         let districtVisible = true;
         
+        // 画面幅が768px以下であればモバイル端末と判定
+        const isMobile = window.innerWidth <= 768;
+
         /** * ===================================
          * 2. UI制御・表示切り替えに関する関数群
          * ===================================
          */
+        
+        // 情報パネルの開閉
         function toggleInfo() { document.getElementById('infoPanel').classList.toggle('open'); }
         
+        // 凡例のアコーディオン（折りたたみ）制御
+        function toggleLegend() {
+            document.getElementById('legend').classList.toggle('is-collapsed');
+        }
+
+        // 表示データの切り替え
         function toggleDataSource(source) {
             dataSourceVisible[source] = !dataSourceVisible[source];
             const btn = document.querySelector(`[data-source="${source}"]`);
@@ -432,6 +452,7 @@
             updateLegendVisibility();
         }
 
+        // 小学校区の切り替え
         function toggleDistrict() {
             districtVisible = !districtVisible;
             const btn = document.querySelector('[data-source="district"]');
@@ -506,7 +527,6 @@
          * 4. Mapbox マップの初期化・設定
          * ===================================
          */
-        const isMobile = window.innerWidth <= 768;
         mapboxgl.accessToken = 'pk.eyJ1Ijoibm5wZGF0YSIsImEiOiJjbHBnbTV6cXIwd2p2MmlwYWxnYWg1bnh3In0.vDZxaboMvN72PFLaztqqnA';
 
         const map = new mapboxgl.Map({
@@ -538,11 +558,16 @@
         map.on('load', () => {
             const layers = map.getStyle().layers;
             
-            // 【改善】モバイル環境では、ピンチ操作がメインのためズームボタンを非表示にして画面を広く使う
+            // 【改善】モバイルではピンチ操作が主なので、画面を広く使うためズームボタンを非表示にする
             if (!isMobile) {
                 map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
             }
             map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), 'bottom-right');
+
+            // スマホ環境のみ、初期状態で凡例を折りたたむ
+            if (isMobile) {
+                document.getElementById('legend').classList.add('is-collapsed');
+            }
 
             let lowestChildLayerId = null;
             for (const layer of layers) {
@@ -772,7 +797,7 @@
         });
 
         /** * ===================================
-         * 7. Mapbox Search Box (住所検索) の初期化とカスタマイズ
+         * 7. Mapbox Search Box (住所検索) の初期化
          * ===================================
          */
         function initSearch() {
@@ -817,12 +842,12 @@
         else document.getElementById('search-js').addEventListener('load', initSearch);
         map.once('load', initSearch);
 
+        // 検索時は凡例を隠して見やすくする
         document.addEventListener('focusin', (e) => {
             if (e.target.tagName.toLowerCase() === 'input' || e.target.closest('mapbox-search-box')) {
                 document.getElementById('legend').classList.add('hidden');
             }
         });
-        
         document.addEventListener('focusout', (e) => {
             if (e.target.tagName.toLowerCase() === 'input' || e.target.closest('mapbox-search-box')) {
                 setTimeout(() => document.getElementById('legend').classList.remove('hidden'), 300);
