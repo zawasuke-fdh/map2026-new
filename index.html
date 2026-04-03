@@ -130,7 +130,7 @@
             background-color: #f4f7f8; /* 全体を薄いブルーグレー（見やすい色）に */
         }
         
-        /* ポップアップの吹き出しの「しっぽ（▼）」部分の色も枠線に合わせる */
+        /* ポップアップの吹き出しの「しっぽ（▼）」部分の色も背景色に合わせる */
         .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { border-top-color: #f4f7f8; }
         .mapboxgl-popup-anchor-top .mapboxgl-popup-tip { border-bottom-color: #f4f7f8; }
         .mapboxgl-popup-anchor-left .mapboxgl-popup-tip { border-right-color: #f4f7f8; }
@@ -826,6 +826,8 @@
             if (!ageStr) return null;
             const str = ageStr.toString();
             
+            // 警察庁データ等の特有の範囲データはハイライトを除外するが、
+            // 「子どもの事故」データに対してのみこの関数が呼ばれるため、単純に数値を抽出する
             const match = str.match(/(\d+)/); 
             if (!match) return null;
             
@@ -880,14 +882,31 @@
                 
                 if (props['校区名']) {
                     let schoolName = props['校区名'].replace(/小学校$/, '');
-                    district = schoolName.includes('校区') ? `${schoolName} (福岡市)` : `${schoolName}小学校区 (福岡市)`;
+                    if (schoolName.includes('校区') || schoolName.includes('義務教育学校') || schoolName.includes('学園')) {
+                        district = `${schoolName} (福岡市)`;
+                    } else {
+                        district = `${schoolName}小学校区 (福岡市)`;
+                    }
                 } else if (props['A27_004']) { 
                     const schoolName = props['A27_004'].replace(/小学校$/, '');
                     const setter = props['A27_002'] || ''; 
                     const cityMatch = setter.match(/^(.+?)(市|町|村)(立)?/);
                     let cityName = cityMatch ? cityMatch[1] + cityMatch[2] : setter.replace(/立$/, '');
-                    district = `${schoolName}小学校区 (${prefecture}${cityName})`;
+                    
+                    if (schoolName.includes('義務教育学校') || schoolName.includes('学園')) {
+                        district = `${schoolName} (${prefecture}${cityName})`;
+                    } else {
+                        district = `${schoolName}小学校区 (${prefecture}${cityName})`;
+                    }
                 }
+            }
+            
+            // 【新規追加】ポリゴン外（校区情報なし）でもプロパティ文字列から県名を判定する
+            if (!prefecture) {
+                const propStr = JSON.stringify(p);
+                if (propStr.includes('福岡')) prefecture = '福岡県';
+                else if (propStr.includes('佐賀')) prefecture = '佐賀県';
+                else if (propStr.includes('長崎')) prefecture = '長崎県';
             }
 
             const deathCount = parseInt(p["死者数"], 10) || 0;
