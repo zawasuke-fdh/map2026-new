@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="西日本新聞「子どもの交通事故マップ」。福岡、佐賀、長崎県内で起きた子どもの交通事故発生地点を確認できます。">
     <meta property="og:title" content="西日本新聞「福岡・佐賀・長崎3県子どもの交通事故マップ」">
     <meta property="og:type" content="website">
@@ -116,24 +116,25 @@
         .mapboxgl-ctrl-top-left { z-index: 2000 !important; } /* 検索ボックス */
         .mapboxgl-ctrl-top-right,
         .mapboxgl-ctrl-bottom-left,
-        .mapboxgl-ctrl-bottom-right { z-index: 20 !important; } /* ズーム・スケール */
+        .mapboxgl-ctrl-bottom-right { z-index: 20 !important; } /* ズーム・現在地・スケール */
 
         /* =========================================
-           Mapbox ポップアップ関連のカスタマイズ
+           【改善】Mapbox ポップアップ関連のカスタマイズ
+           縁取りを廃止し、全体を薄いグレーで塗ることで視認性を高める
            ========================================= */
         .mapboxgl-popup-content { 
             padding: 16px; 
             border-radius: 10px; 
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3); /* 影を濃くして浮き出させる */
-            border: 2px solid #f15a24; /* オレンジの枠線 */
-            background-color: #fffaf7; /* 真っ白ではなく、ごく薄いクリーム色で地図と区別 */
+            box-shadow: 0 6px 24px rgba(0,0,0,0.25); /* 影で視認性を確保 */
+            border: none; /* 縁取りのズレを防ぐため廃止 */
+            background-color: #f4f7f8; /* 全体を薄いブルーグレー（見やすい色）に */
         }
         
-        /* ポップアップの吹き出しの「しっぽ（▼）」部分の色も枠線に合わせる */
-        .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { border-top-color: #f15a24; }
-        .mapboxgl-popup-anchor-top .mapboxgl-popup-tip { border-bottom-color: #f15a24; }
-        .mapboxgl-popup-anchor-left .mapboxgl-popup-tip { border-right-color: #f15a24; }
-        .mapboxgl-popup-anchor-right .mapboxgl-popup-tip { border-left-color: #f15a24; }
+        /* ポップアップの吹き出しの「しっぽ（▼）」部分の色を背景色に合わせる */
+        .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { border-top-color: #f4f7f8; }
+        .mapboxgl-popup-anchor-top .mapboxgl-popup-tip { border-bottom-color: #f4f7f8; }
+        .mapboxgl-popup-anchor-left .mapboxgl-popup-tip { border-right-color: #f4f7f8; }
+        .mapboxgl-popup-anchor-right .mapboxgl-popup-tip { border-left-color: #f4f7f8; }
 
         .popup-title { 
             font-size: 1.15rem; 
@@ -146,8 +147,9 @@
         
         /* ポップアップ内の情報テーブル */
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th, td { border: 1px solid #e5e5e5; padding: 7px 9px; vertical-align: middle; }
-        td:first-child { background-color: #f4f4f4; font-weight: bold; color: #555; white-space: nowrap; width: 30%; }
+        th, td { border: 1px solid #e5e5e5; padding: 7px 9px; vertical-align: middle; background-color: #fff; }
+        /* テーブルの左側（項目名）の背景も、ポップアップ背景に合わせて調整 */
+        td:first-child { background-color: #e2e6e9; font-weight: bold; color: #555; white-space: nowrap; width: 30%; }
 
         /* データ表示用の装飾（ハイライト等） */
         .critical-info {
@@ -626,6 +628,17 @@
             if (!isMobile) {
                 map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
             }
+            
+            // 【新規追加】現在地取得（GPS）コントロールを追加（右上に配置）
+            map.addControl(
+                new mapboxgl.GeolocateControl({
+                    positionOptions: { enableHighAccuracy: true },
+                    trackUserLocation: true, // ユーザーの移動に追従する
+                    showUserHeading: true    // デバイスの向きを表示
+                }), 
+                'top-right'
+            );
+            
             // スケール（縮尺バー）を追加（右下に配置）
             map.addControl(new mapboxgl.ScaleControl({ maxWidth: 150, unit: 'metric' }), 'bottom-right');
 
@@ -805,7 +818,7 @@
 
         /**
          * 当事者情報のHTMLパーツを作成する共通関数
-         * 【修正】applyHighlight 引数によって、子どもの事故データのみ色づけを実行します。
+         * applyHighlight 引数によって、子どもの事故データのみ色づけを実行します。
          */
         function formatParty(type, age, injury, applyHighlight) {
             let ageHtml = age || '-';
