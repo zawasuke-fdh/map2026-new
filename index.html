@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="西日本新聞「子どもの交通事故マップ」。福岡、佐賀、長崎県内で起きた子どもの交通事故発生地点を確認できます。">
     <meta property="og:title" content="西日本新聞「福岡・佐賀・長崎3県子どもの交通事故マップ」">
     <meta property="og:type" content="website">
@@ -119,13 +119,13 @@
         .mapboxgl-ctrl-bottom-right { z-index: 20 !important; } /* ズーム・現在地・スケール */
 
         /* =========================================
-           【改善】Mapbox ポップアップ関連のカスタマイズ
+           Mapbox ポップアップ関連のカスタマイズ
            縁取りを廃止し、全体を薄いグレーで塗ることで視認性を高める
            ========================================= */
         .mapboxgl-popup-content { 
             padding: 16px; 
             border-radius: 10px; 
-            box-shadow: 0 6px 24px rgba(0,0,0,0.25); /* 影で視認性を確保 */
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3); /* 影で視認性を確保 */
             border: none; /* 縁取りのズレを防ぐため廃止 */
             background-color: #f4f7f8; /* 全体を薄いブルーグレー（見やすい色）に */
         }
@@ -260,6 +260,26 @@
         .sns-share { display: flex; gap: 15px; margin-bottom: 25px; }
         .sns-share img { width: 36px; height: 36px; opacity: 0.8; transition: opacity 0.2s; }
         .sns-share img:hover { opacity: 1; }
+        
+        /* =========================================
+           PC向けのスタイル（パネルを下部中央に浮かせる）
+           ========================================= */
+        @media (min-width: 769px) {
+            .control-panel {
+                position: absolute;
+                top: auto; bottom: 30px; left: 50%; right: auto;
+                transform: translateX(-50%);
+                background: rgba(255,255,255,0.95);
+                backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+                border-radius: 12px; padding: 12px 25px;
+                display: flex; flex-direction: row; align-items: center;
+                justify-content: center; flex-wrap: wrap; gap: 15px 30px;
+                width: max-content; max-width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            }
+            .control-row { margin-bottom: 0; }
+            .control-row-title { width: auto; margin-right: 12px; font-size: 0.85rem; }
+            .control-btn { flex: 0 0 auto; padding: 8px 16px 8px 30px; }
+        }
 
         /* =========================================
            モバイル（スマートフォン）向けレイアウト調整
@@ -802,9 +822,6 @@
         function getAgeHighlight(ageStr) {
             if (!ageStr) return null;
             const str = ageStr.toString();
-            
-            // 警察庁データ特有の範囲データはハイライトを除外する
-            if (str.includes('～') || str.includes('以上') || str.includes('不明')) return null;
             
             const match = str.match(/(\d+)/); 
             if (!match) return null;
